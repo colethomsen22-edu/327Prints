@@ -100,6 +100,7 @@
                             <button class="btn btn-sm btn-outline-success me-1" onclick="updateStatus(${job.Job_ID}, 'Printing')">Start</button>
                             <button class="btn btn-sm btn-outline-info me-1" onclick="updateStatus(${job.Job_ID}, 'Completed')">Complete</button>
                             <button class="btn btn-sm btn-outline-danger" onclick="updateStatus(${job.Job_ID}, 'Failed')">Fail</button>
+                            <a href="/email-preview/${job.Job_ID}" target="_blank" class="btn btn-sm btn-secondary ms-2">Email</a>
                         </td>
                     </tr>
                 `;

@@ -38,10 +38,29 @@ def operator_dashboard():
     # Renders the Operator Control Dashboard
     return render_template('operator.html')
 
-@app.route('/email-preview')
-def email_preview():
-    # Renders the SendGrid Email Notification Preview
-    return render_template('email_preview.html')
+@app.route('/email-preview/<int:job_id>')
+def email_preview(job_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Fetch the specific job and the associated user's name
+    cursor.execute('''
+        SELECT p.Job_ID, u.First_name, u.Last_name 
+        FROM Print_Job p
+        JOIN "User" u ON p.Requester_ID = u.User_ID
+        WHERE p.Job_ID = %s;
+    ''', (job_id,))
+    
+    job = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    # If someone types an invalid ID, show an error
+    if job is None:
+        return "Job not found in database", 404
+
+    # Pass the database variables to the HTML template
+    return render_template('email_preview.html', job_id=job[0], first_name=job[1], last_name=job[2])
 
 # ==========================================
 # API ENDPOINTS (Backend Logic)
