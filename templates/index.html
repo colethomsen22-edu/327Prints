@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>327Prints - Public Queue</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+
+<div class="container my-4">
+    <header class="d-flex justify-content-between align-items-center mb-4">
+        <h1>327Prints | Luter 327 Lab</h1>
+        <a href="/intake" class="btn btn-primary">Submit New Print</a>
+    </header>
+
+    <div class="row">
+        <!-- Left Column: Active Queue -->
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="card-title mb-0">Current Print Queue</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Pos</th>
+                                <th>Requester</th>
+                                <th>Status</th>
+                                <th>Time Remaining</th>
+                            </tr>
+                        </thead>
+                        <tbody id="queue-table-body">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Live Stream Placeholder -->
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="card-title mb-0">Bambu X1C Feed</h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="bg-secondary text-white p-5 rounded mb-3">
+                        [ Live Camera Placeholder ]
+                    </div>
+                    <h6>Active Job: Capstone Gears</h6>
+                    <div class="progress">
+                        <div class="progress-bar bg-success" style="width: 65%;">65%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Fetch queue data from PostgreSQL API and render in table
+    async function loadQueue() {
+        try {
+            const response = await fetch('/api/jobs/queue');
+            const jobs = await response.json();
+            const tbody = document.getElementById('queue-table-body');
+            tbody.innerHTML = '';
+
+            jobs.forEach(job => {
+                const row = `
+                    <tr>
+                        <td>${job.Queue_position}</td>
+                        <td>${job.First_name} ${job.Last_name}</td>
+                        <td><span class="badge ${job.Current_status === 'Printing' ? 'bg-success' : 'bg-warning text-dark'}">${job.Current_status}</span></td>
+                        <td>${job.Time_remaining} mins</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        } catch (error) {
+            console.error('Error fetching queue:', error);
+        }
+    }
+
+    loadQueue();
+</script>
+</body>
+</html>

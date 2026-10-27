@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>327Prints - Print Intake Form</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+
+<div class="container my-5" style="max-width: 600px;">
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">New 3D Print Request</h4>
+        </div>
+        <div class="card-body">
+            <form id="intake-form">
+                <div class="mb-3">
+                    <label class="form-label">Requester User ID</label>
+                    <input type="number" id="requester_id" class="form-control" placeholder="e.g., 1" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Filament Type</label>
+                    <select class="form-select">
+                        <option>PLA</option>
+                        <option>PETG</option>
+                        <option>ABS</option>
+                    </select>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="/" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-success">Submit to Queue</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('intake-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const requesterId = document.getElementById('requester_id').value;
+
+        const response = await fetch('/api/jobs/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requester_id: parseInt(requesterId) })
+        });
+
+        const result = await response.json();
+        if (result.status === 'success') {
+            alert('Job submitted successfully! ID: ' + result.Job_ID);
+            window.location.href = '/';
+        } else {
+            alert('Submission failed.');
+        }
+    });
+</script>
+</body>
+</html>

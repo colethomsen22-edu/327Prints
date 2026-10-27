@@ -1,6 +1,6 @@
 import os
 import psycopg2
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from dotenv import load_dotenv
 
 # Load environment variables from the .env file
@@ -19,30 +19,37 @@ def get_db_connection():
     )
     return conn
 
+# ==========================================
+# HTML ROUTING (User Interface)
+# ==========================================
+
 @app.route('/')
-def home():
-    return "327Prints Server is running!"
+def public_queue():
+    # Renders the Public Queue Dashboard
+    return render_template('index.html')
+
+@app.route('/intake')
+def intake_view():
+    # Renders the Intake Form
+    return render_template('intake.html')
+
+# ==========================================
+# API ENDPOINTS (Backend Logic)
+# ==========================================
 
 @app.route('/test-db')
 def test_db():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-
-        # Query to verify the connection is active
         cursor.execute('SELECT version();')
         db_version = cursor.fetchone()
-
-        # Close the connection
         cursor.close()
         conn.close()
-
         return jsonify({"status": "success", "db_version": db_version[0]})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-if __name__ == '__main__':
-    app.run()
 @app.route('/api/users/create', methods=['POST'])
 def create_user():
     data = request.get_json()
@@ -83,9 +90,9 @@ def get_queue():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Fetches all jobs and joins the User table to get the requester's name
+    # Fetches jobs and joins the User table (getting all data HTML needs)
     cursor.execute('''
-        SELECT p.Job_ID, p.Current_status, u.First_name, u.Last_name 
+        SELECT p.Job_ID, p.Queue_position, p.Current_status, p.Time_remaining, u.First_name, u.Last_name  
         FROM Print_Job p
         JOIN "User" u ON p.Requester_ID = u.User_ID
         ORDER BY p.Job_ID ASC;
@@ -95,6 +102,24 @@ def get_queue():
     cursor.close()
     conn.close()
 
-    # Format the SQL results into a JSON list
-    queue = [{"Job_ID": job[0], "Status": job[1], "Requester": f"{job[2]} {job[3]}"} for job in jobs]
-    return jsonify({"queue": queue})
+    # Format the SQL results into the exact JSON list our frontend JS expects
+    queue = []
+    for job in jobs:
+        queue.append({
+            "Job_ID": job[0],
+            "Queue_position": job[1] if job[1] is not None else '-',
+            "Current_status": job[2],
+            "Time_remaining": job[3] if job[3] is not None else 0,
+            "First_name": job[4],
+            "Last_name": job[5]
+        })
+        
+    return jsonify(queue)
+
+# ==========================================
+# SERVER EXECUTION
+# ==========================================
+
+if __name__ == '__main__':
+    # debug=True automatically restarts the server when you save changes
+    app.run(debug=True)
