@@ -33,6 +33,11 @@ def intake_view():
     # Renders the Intake Form
     return render_template('intake.html')
 
+@app.route('/operator')
+def operator_dashboard():
+    # Renders the Operator Control Dashboard
+    return render_template('operator.html')
+
 # ==========================================
 # API ENDPOINTS (Backend Logic)
 # ==========================================
@@ -115,6 +120,25 @@ def get_queue():
         })
         
     return jsonify(queue)
+
+@app.route('/api/jobs/update-status', methods=['POST'])
+def update_job_status():
+    data = request.get_json()
+    job_id = data.get('job_id')
+    new_status = data.get('status')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        'UPDATE Print_Job SET Current_status = %s WHERE Job_ID = %s;',
+        (new_status, job_id)
+    )
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+    return jsonify({"status": "success", "message": f"Job #{job_id} updated to {new_status}"}), 200
 
 # ==========================================
 # SERVER EXECUTION
