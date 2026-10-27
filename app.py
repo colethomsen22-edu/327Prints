@@ -38,6 +38,11 @@ def operator_dashboard():
     # Renders the Operator Control Dashboard
     return render_template('operator.html')
 
+@app.route('/email-preview')
+def email_preview():
+    # Renders the SendGrid Email Notification Preview
+    return render_template('email_preview.html')
+
 # ==========================================
 # API ENDPOINTS (Backend Logic)
 # ==========================================
