@@ -2,6 +2,8 @@ import os
 import psycopg2
 from flask import Flask, jsonify, request, render_template
 from dotenv import load_dotenv
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -18,6 +20,35 @@ def get_db_connection():
         port=os.environ.get('DB_PORT')
     )
     return conn
+
+# Helper function to send completion emails via SendGrid
+def send_completion_email(to_email, first_name, job_id):
+    api_key = os.getenv('SENDGRID_API_KEY')
+    sender = os.getenv('SENDER_EMAIL', 'noreply@327prints.cnu.edu')
+
+    if not api_key:
+        print("SendGrid API key missing; email skipped.")
+        return
+
+    html_content = f"""
+    <h2>Good news, {first_name}!</h2>
+    <p>Your 3D print job <strong>#{job_id}</strong> has been marked as <strong>Completed</strong>.</p>
+    <p>Please pick up your item from Luter 327 within 48 hours.</p>
+    """
+
+    message = Mail(
+        from_email=sender,
+        to_emails=to_email,
+        subject=f"327Prints: Print Job #{job_id} Complete!",
+        html_content=html_content
+    )
+
+    try:
+        sg = SendGridAPIClient(api_key)
+        sg.send(message)
+        print(f"Email sent successfully to {to_email}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
 # ==========================================
 # HTML ROUTING (User Interface)
@@ -45,12 +76,12 @@ def email_preview(job_id):
 
     # Fetch the specific job and the associated user's name
     cursor.execute('''
-        SELECT p.Job_ID, u.First_name, u.Last_name 
+        SELECT p.Job_ID, u.First_name, u.Last_name
         FROM Print_Job p
         JOIN "User" u ON p.Requester_ID = u.User_ID
         WHERE p.Job_ID = %s;
     ''', (job_id,))
-    
+
     job = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -121,7 +152,7 @@ def get_queue():
 
     # Fetches jobs and joins the User table (getting all data HTML needs)
     cursor.execute('''
-        SELECT p.Job_ID, p.Queue_position, p.Current_status, p.Time_remaining, u.First_name, u.Last_name  
+        SELECT p.Job_ID, p.Queue_position, p.Current_status, p.Time_remaining, u.First_name, u.Last_name
         FROM Print_Job p
         JOIN "User" u ON p.Requester_ID = u.User_ID
         ORDER BY p.Job_ID ASC;
@@ -142,7 +173,7 @@ def get_queue():
             "First_name": job[4],
             "Last_name": job[5]
         })
-        
+
     return jsonify(queue)
 
 @app.route('/api/jobs/update-status', methods=['POST'])
@@ -154,14 +185,29 @@ def update_job_status():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Update job status
     cursor.execute(
         'UPDATE Print_Job SET Current_status = %s WHERE Job_ID = %s;',
         (new_status, job_id)
     )
-    conn.commit()
 
+    # Fetch the user's email and first name for the notification
+    cursor.execute('''
+        SELECT u.Email_address, u.First_name
+        FROM Print_Job p
+        JOIN "User" u ON p.Requester_ID = u.User_ID
+        WHERE p.Job_ID = %s;
+    ''', (job_id,))
+
+    user_info = cursor.fetchone()
+    conn.commit()
     cursor.close()
     conn.close()
+
+    # Fire the SendGrid email dispatch if the new status is Completed
+    if new_status == 'Completed' and user_info:
+        send_completion_email(user_info[0], user_info[1], job_id)
+
     return jsonify({"status": "success", "message": f"Job #{job_id} updated to {new_status}"}), 200
 
 # ==========================================
