@@ -1,4 +1,7 @@
 import os
+import ssl
+import json
+import paho.mqtt.client as mqtt
 import psycopg2
 from flask import Flask, jsonify, request, render_template
 from dotenv import load_dotenv
@@ -97,16 +100,52 @@ def email_preview(job_id):
 # API ENDPOINTS (Backend Logic)
 # ==========================================
 
-@app.route('/test-db')
-def test_db():
+@app.route('/api/printer/status', methods=['GET'])
+def get_printer_status():
+    host = os.getenv('BAMBU_HOST')
+    serial = os.getenv('BAMBU_SERIAL')
+    access_code = os.getenv('BAMBU_ACCESS_CODE')
+
+    if not host or not access_code:
+        return jsonify({"status": "error", "message": "Printer credentials not set in .env"}), 500
+
+    telemetry_data = {}
+
+    def on_connect(client, userdata, flags, rc):
+        client.subscribe(f"device/{serial}/report")
+
+    def on_message(client, userdata, msg):
+        nonlocal telemetry_data
+        try:
+            payload = json.loads(msg.payload.decode('utf-8'))
+            if 'print' in payload:
+                print_data = payload['print']
+                telemetry_data = {
+                    "gcode_state": print_data.get('gcode_state', 'IDLE'),
+                    "mc_percent": print_data.get('mc_percent', 0),
+                    "mc_remaining_time": print_data.get('mc_remaining_time', 0),
+                    "nozzle_temper": print_data.get('nozzle_temper', 0),
+                    "bed_temper": print_data.get('bed_temper', 0)
+                }
+        except Exception as e:
+            telemetry_data = {"error": str(e)}
+        finally:
+            client.disconnect()
+
+    client = mqtt.Client()
+    client.username_pw_set("bblp", access_code)
+    client.tls_set(cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
+    client.on_connect = on_connect
+    client.on_message = on_message
+
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT version();')
-        db_version = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        return jsonify({"status": "success", "db_version": db_version[0]})
+        client.connect(host, 8883, 60)
+        client.loop_start()
+        import time
+        time.sleep(1) # Brief wait to capture the MQTT broadcast
+        client.loop_stop()
+        return jsonify({"status": "success", "telemetry": telemetry_data})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

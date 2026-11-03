@@ -39,19 +39,32 @@
             </div>
         </div>
 
-        <!-- Right Column: Live Stream Placeholder -->
+        <!-- Right Column: Live Bambu Telemetry -->
         <div class="col-md-4">
-            <div class="card shadow-sm">
+            <div class="card shadow-sm border-0">
                 <div class="card-header bg-dark text-white">
-                    <h5 class="card-title mb-0">Bambu X1C Feed</h5>
+                    <h5 class="card-title mb-0">Bambu X1C Telemetry</h5>
                 </div>
-                <div class="card-body text-center">
-                    <div class="bg-secondary text-white p-5 rounded mb-3">
-                        [ Live Camera Placeholder ]
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <span class="text-muted fw-bold">Status:</span>
+                        <span id="printer-status-text" class="badge bg-secondary">CONNECTING...</span>
                     </div>
-                    <h6>Active Job: Capstone Gears</h6>
-                    <div class="progress">
-                        <div class="progress-bar bg-success" style="width: 65%;">65%</div>
+
+                    <div class="row text-center mb-4">
+                        <div class="col-6 border-end">
+                            <h6 class="text-muted mb-1">Nozzle Temp</h6>
+                            <h4 id="printer-nozzle-temp" class="text-danger mb-0">--°C</h4>
+                        </div>
+                        <div class="col-6">
+                            <h6 class="text-muted mb-1">Bed Temp</h6>
+                            <h4 id="printer-bed-temp" class="text-warning mb-0">--°C</h4>
+                        </div>
+                    </div>
+
+                    <h6 class="text-muted mb-2">Print Progress <span id="printer-time-left" class="float-end text-dark small">-- mins left</span></h6>
+                    <div class="progress" style="height: 25px;">
+                        <div id="printer-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%;">0%</div>
                     </div>
                 </div>
             </div>
@@ -84,7 +97,43 @@
         }
     }
 
+    // Fetch real-time Bambu printer telemetry via MQTT backend endpoint
+    async function loadPrinterTelemetry() {
+        try {
+            const response = await fetch('/api/printer/status');
+            const data = await response.json();
+
+            if (data.status === 'success' && Object.keys(data.telemetry).length > 0) {
+                const t = data.telemetry;
+
+                // Update Status Badge
+                const statusBadge = document.getElementById('printer-status-text');
+                statusBadge.innerText = t.gcode_state;
+                statusBadge.className = t.gcode_state === 'RUNNING' ? 'badge bg-success' : 'badge bg-primary';
+
+                // Update Temps
+                document.getElementById('printer-nozzle-temp').innerText = t.nozzle_temper + '°C';
+                document.getElementById('printer-bed-temp').innerText = t.bed_temper + '°C';
+
+                // Update Progress Bar
+                const progressBar = document.getElementById('printer-progress-bar');
+                progressBar.style.width = t.mc_percent + '%';
+                progressBar.innerText = t.mc_percent + '%';
+
+                // Update Time Remaining
+                document.getElementById('printer-time-left').innerText = t.mc_remaining_time + ' mins left';
+            }
+        } catch (error) {
+            console.error('Error fetching printer telemetry:', error);
+        }
+    }
+
+    // Load initial data
     loadQueue();
+    loadPrinterTelemetry();
+
+    // Poll the printer endpoint every 10 seconds
+    setInterval(loadPrinterTelemetry, 10000);
 </script>
 </body>
 </html>
