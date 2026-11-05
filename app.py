@@ -1,9 +1,11 @@
 import os
 import ssl
 import json
+import threading
 import paho.mqtt.client as mqtt
 import psycopg2
-from flask import Flask, jsonify, request, render_template
+import subprocess
+from flask import Flask, jsonify, request, render_template, Response
 from dotenv import load_dotenv
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -13,7 +15,60 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Helper function to get a database connection
+# ==========================================
+# BACKGROUND MQTT PRINTER CONNECTION
+# ==========================================
+latest_telemetry = {}
+
+def start_mqtt_client():
+    host = os.getenv('BAMBU_HOST')
+    serial = os.getenv('BAMBU_SERIAL')
+    access_code = os.getenv('BAMBU_ACCESS_CODE')
+
+    if not host or not access_code:
+        print("Printer credentials missing in .env. MQTT disabled.")
+        return
+
+    def on_connect(client, userdata, flags, rc):
+        print("Connected to Bambu Printer MQTT!")
+        client.subscribe(f"device/{serial}/report")
+
+    def on_message(client, userdata, msg):
+        global latest_telemetry
+        try:
+            payload = json.loads(msg.payload.decode('utf-8'))
+            if 'print' in payload:
+                print_data = payload['print']
+                latest_telemetry = {
+                    "gcode_state": print_data.get('gcode_state', 'IDLE'),
+                    "mc_percent": print_data.get('mc_percent', 0),
+                    "mc_remaining_time": print_data.get('mc_remaining_time', 0),
+                    "nozzle_temper": print_data.get('nozzle_temper', 0),
+                    "bed_temper": print_data.get('bed_temper', 0)
+                }
+        except Exception as e:
+            pass # Ignore malformed packets silently to keep server running
+
+    client = mqtt.Client()
+    client.username_pw_set("bblp", access_code)
+    client.tls_set(cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
+    client.on_connect = on_connect
+    client.on_message = on_message
+
+    try:
+        client.connect(host, 8883, 60)
+        client.loop_start() # Runs continuously in the background
+    except Exception as e:
+        print(f"Failed to connect to printer: {e}")
+
+# Start the MQTT background thread once when Flask boots up
+start_mqtt_client()
+
+# ==========================================
+# HELPER FUNCTIONS
+# ==========================================
+
 def get_db_connection():
     conn = psycopg2.connect(
         dbname=os.environ.get('DB_NAME'),
@@ -24,7 +79,6 @@ def get_db_connection():
     )
     return conn
 
-# Helper function to send completion emails via SendGrid
 def send_completion_email(to_email, first_name, job_id):
     api_key = os.getenv('SENDGRID_API_KEY')
     sender = os.getenv('SENDER_EMAIL', 'noreply@327prints.cnu.edu')
@@ -97,57 +151,78 @@ def email_preview(job_id):
     return render_template('email_preview.html', job_id=job[0], first_name=job[1], last_name=job[2])
 
 # ==========================================
+# LIVE CAMERA FEED (FFMPEG SUBPROCESS)
+# ==========================================
+import subprocess
+
+def generate_frames():
+    bambu_host = os.getenv('BAMBU_HOST')
+    access_code = os.getenv('BAMBU_ACCESS_CODE')
+
+    if not bambu_host or not access_code:
+        print("Missing printer credentials for camera feed.")
+        return
+
+    stream_url = f"rtsps://bblp:{access_code}@{bambu_host}:322/streaming/live/1"
+
+# Use system FFmpeg directly
+    command = [
+        'ffmpeg',
+        '-rtsp_transport', 'tcp',
+        '-i', stream_url,
+        '-f', 'image2pipe',      # Output format: raw images
+        '-vcodec', 'mjpeg',      # Encoded as JPEG
+        '-'                      # Pipe to standard output
+    ]
+
+    # Let FFmpeg print errors directly to your terminal so we can diagnose them
+    process = subprocess.Popen(command, stdout=subprocess.PIPE)
+
+    buffer = b''
+    while True:
+        # Read chunks of the raw video stream
+        chunk = process.stdout.read(8192)
+        if not chunk:
+            break
+        buffer += chunk
+
+        # Look for the hex byte markers indicating the start and end of a JPEG image
+        start_idx = buffer.find(b'\xff\xd8')
+        end_idx = buffer.find(b'\xff\xd9')
+
+        if start_idx != -1 and end_idx != -1:
+            # Extract the complete image frame
+            jpg_frame = buffer[start_idx:end_idx+2]
+
+            # Remove the processed frame from the buffer
+            buffer = buffer[end_idx+2:]
+
+            # Yield the frame to the Flask webpage
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + jpg_frame + b'\r\n')
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+# ==========================================
 # API ENDPOINTS (Backend Logic)
 # ==========================================
 
 @app.route('/api/printer/status', methods=['GET'])
 def get_printer_status():
-    host = os.getenv('BAMBU_HOST')
-    serial = os.getenv('BAMBU_SERIAL')
-    access_code = os.getenv('BAMBU_ACCESS_CODE')
+    global latest_telemetry
 
-    if not host or not access_code:
-        return jsonify({"status": "error", "message": "Printer credentials not set in .env"}), 500
+    # If the background thread hasn't caught a message yet, return a safe fallback
+    if not latest_telemetry:
+        return jsonify({"status": "success", "telemetry": {
+            "gcode_state": "CONNECTING...",
+            "mc_percent": 0,
+            "mc_remaining_time": 0,
+            "nozzle_temper": "--",
+            "bed_temper": "--"
+        }})
 
-    telemetry_data = {}
-
-    def on_connect(client, userdata, flags, rc):
-        client.subscribe(f"device/{serial}/report")
-
-    def on_message(client, userdata, msg):
-        nonlocal telemetry_data
-        try:
-            payload = json.loads(msg.payload.decode('utf-8'))
-            if 'print' in payload:
-                print_data = payload['print']
-                telemetry_data = {
-                    "gcode_state": print_data.get('gcode_state', 'IDLE'),
-                    "mc_percent": print_data.get('mc_percent', 0),
-                    "mc_remaining_time": print_data.get('mc_remaining_time', 0),
-                    "nozzle_temper": print_data.get('nozzle_temper', 0),
-                    "bed_temper": print_data.get('bed_temper', 0)
-                }
-        except Exception as e:
-            telemetry_data = {"error": str(e)}
-        finally:
-            client.disconnect()
-
-    client = mqtt.Client()
-    client.username_pw_set("bblp", access_code)
-    client.tls_set(cert_reqs=ssl.CERT_NONE)
-    client.tls_insecure_set(True)
-    client.on_connect = on_connect
-    client.on_message = on_message
-
-    try:
-        client.connect(host, 8883, 60)
-        client.loop_start()
-        import time
-        time.sleep(1) # Brief wait to capture the MQTT broadcast
-        client.loop_stop()
-        return jsonify({"status": "success", "telemetry": telemetry_data})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    return jsonify({"status": "success", "telemetry": latest_telemetry})
 
 @app.route('/api/users/create', methods=['POST'])
 def create_user():
