@@ -39,41 +39,114 @@
             </div>
         </div>
 
-        <!-- Right Column: Live Bambu Telemetry -->
+        <!-- Right Column: Tabbed Live Bambu Telemetry -->
         <div class="col-md-4">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-dark text-white">
-                    <h5 class="card-title mb-0">Bambu X1C Telemetry</h5>
-                </div>
-                <div class="card-body">
-                    <div class="d-flex justify-content-between mb-3">
-                        <span class="text-muted fw-bold">Status:</span>
-                        <span id="printer-status-text" class="badge bg-secondary">CONNECTING...</span>
-                    </div>
 
-                    <div class="row text-center mb-4">
-                        <div class="col-6 border-end">
-                            <h6 class="text-muted mb-1">Nozzle Temp</h6>
-                            <h4 id="printer-nozzle-temp" class="text-danger mb-0">--°C</h4>
-                        </div>
-                        <div class="col-6">
-                            <h6 class="text-muted mb-1">Bed Temp</h6>
-                            <h4 id="printer-bed-temp" class="text-warning mb-0">--°C</h4>
-                        </div>
-                    </div>
+            <!-- Tab Navigation -->
+            <ul class="nav nav-tabs" id="printerTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="printer1-tab" data-bs-toggle="tab" data-bs-target="#printer1-pane" type="button" role="tab">Printer 1 (X1C)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="printer2-tab" data-bs-toggle="tab" data-bs-target="#printer2-pane" type="button" role="tab">Printer 2 (P1P)</button>
+                </li>
+            </ul>
 
-                    <h6 class="text-muted mb-2">Print Progress <span id="printer-time-left" class="float-end text-dark small">-- mins left</span></h6>
-                    <div class="progress" style="height: 25px;">
-                        <div id="printer-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%;">0%</div>
+            <!-- Tab Content -->
+            <div class="tab-content mt-3" id="printerTabsContent">
+
+                <!-- Printer 1 Tab Pane -->
+                <div class="tab-pane fade show active" id="printer1-pane" role="tabpanel">
+                    <div class="card shadow-sm border-top-0 rounded-0 rounded-bottom">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-3">
+                                <span class="text-muted fw-bold">Status:</span>
+                                <span id="printer1-status-text" class="badge bg-secondary">CONNECTING...</span>
+                            </div>
+
+                            <!-- Live Camera Feed 1 -->
+                            <div class="mb-4 text-center bg-black rounded overflow-hidden shadow-sm border">
+                                <!-- Loads by default since it is the active tab -->
+                                <img id="cam1" src="/video_feed/1" class="img-fluid w-100" alt="Live Printer 1 Feed">
+                            </div>
+
+                            <div class="row text-center mb-4">
+                                <div class="col-6 border-end">
+                                    <h6 class="text-muted mb-1">Nozzle Temp</h6>
+                                    <h4 id="printer1-nozzle-temp" class="text-danger mb-0">--°C</h4>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="text-muted mb-1">Bed Temp</h6>
+                                    <h4 id="printer1-bed-temp" class="text-warning mb-0">--°C</h4>
+                                </div>
+                            </div>
+
+                            <h6 class="text-muted mb-2">Print Progress <span id="printer1-time-left" class="float-end text-dark small">-- mins left</span></h6>
+                            <div class="progress" style="height: 25px;">
+                                <div id="printer1-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%;">0%</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Printer 2 Tab Pane -->
+                <div class="tab-pane fade" id="printer2-pane" role="tabpanel">
+                    <div class="card shadow-sm border-top-0 rounded-0 rounded-bottom">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-3">
+                                <span class="text-muted fw-bold">Status:</span>
+                                <span id="printer2-status-text" class="badge bg-secondary">CONNECTING...</span>
+                            </div>
+
+                            <!-- Live Camera Feed 2 -->
+                            <div class="mb-4 text-center bg-black rounded overflow-hidden shadow-sm border">
+                                <!-- Blank src initially, JS will inject it when tab is clicked -->
+                                <img id="cam2" src="" class="img-fluid w-100" alt="Live Printer 2 Feed">
+                            </div>
+
+                            <div class="row text-center mb-4">
+                                <div class="col-6 border-end">
+                                    <h6 class="text-muted mb-1">Nozzle Temp</h6>
+                                    <h4 id="printer2-nozzle-temp" class="text-danger mb-0">--°C</h4>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="text-muted mb-1">Bed Temp</h6>
+                                    <h4 id="printer2-bed-temp" class="text-warning mb-0">--°C</h4>
+                                </div>
+                            </div>
+
+                            <h6 class="text-muted mb-2">Print Progress <span id="printer2-time-left" class="float-end text-dark small">-- mins left</span></h6>
+                            <div class="progress" style="height: 25px;">
+                                <div id="printer2-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%;">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 </div>
 
+<!-- Bootstrap Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-    // Fetch queue data from PostgreSQL API and render in table
+    // Stream Management: Only load the camera for the active tab
+    const cam1 = document.getElementById('cam1');
+    const cam2 = document.getElementById('cam2');
+
+    document.getElementById('printer1-tab').addEventListener('show.bs.tab', function () {
+        cam1.src = '/video_feed/1'; // Start Stream 1
+        cam2.src = '';              // Kill Stream 2 to free up connections
+    });
+
+    document.getElementById('printer2-tab').addEventListener('show.bs.tab', function () {
+        cam2.src = '/video_feed/2'; // Start Stream 2
+        cam1.src = '';              // Kill Stream 1 to free up connections
+    });
+
+    // Fetch queue data from PostgreSQL API
     async function loadQueue() {
         try {
             const response = await fetch('/api/jobs/queue');
@@ -97,34 +170,33 @@
         }
     }
 
-    // Fetch real-time Bambu printer telemetry via MQTT backend endpoint
+    // Fetch real-time Bambu printer telemetry
     async function loadPrinterTelemetry() {
         try {
             const response = await fetch('/api/printer/status');
             const data = await response.json();
 
-            if (data.status === 'success' && Object.keys(data.telemetry).length > 0) {
-                const t = data.telemetry;
+            if (data.status === 'success') {
+                [1, 2].forEach(pid => {
+                    const t = data.telemetry[pid];
+                    if (t) {
+                        const statusBadge = document.getElementById(`printer${pid}-status-text`);
+                        statusBadge.innerText = t.gcode_state;
+                        statusBadge.className = t.gcode_state === 'RUNNING' ? 'badge bg-success' : 'badge bg-primary';
 
-                // Update Status Badge
-                const statusBadge = document.getElementById('printer-status-text');
-                statusBadge.innerText = t.gcode_state;
-                statusBadge.className = t.gcode_state === 'RUNNING' ? 'badge bg-success' : 'badge bg-primary';
+                        document.getElementById(`printer${pid}-nozzle-temp`).innerText = t.nozzle_temper + '°C';
+                        document.getElementById(`printer${pid}-bed-temp`).innerText = t.bed_temper + '°C';
 
-                // Update Temps
-                document.getElementById('printer-nozzle-temp').innerText = t.nozzle_temper + '°C';
-                document.getElementById('printer-bed-temp').innerText = t.bed_temper + '°C';
+                        const progressBar = document.getElementById(`printer${pid}-progress-bar`);
+                        progressBar.style.width = t.mc_percent + '%';
+                        progressBar.innerText = t.mc_percent + '%';
 
-                // Update Progress Bar
-                const progressBar = document.getElementById('printer-progress-bar');
-                progressBar.style.width = t.mc_percent + '%';
-                progressBar.innerText = t.mc_percent + '%';
-
-                // Update Time Remaining
-                document.getElementById('printer-time-left').innerText = t.mc_remaining_time + ' mins left';
+                        document.getElementById(`printer${pid}-time-left`).innerText = t.mc_remaining_time + ' mins left';
+                    }
+                });
             }
         } catch (error) {
-            console.error('Error fetching printer telemetry:', error);
+            console.error('Error fetching telemetry:', error);
         }
     }
 

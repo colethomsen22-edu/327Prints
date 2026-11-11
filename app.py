@@ -16,21 +16,17 @@ load_dotenv()
 app = Flask(__name__)
 
 # ==========================================
-# BACKGROUND MQTT PRINTER CONNECTION
+# BACKGROUND MQTT PRINTER CONNECTIONS
 # ==========================================
-latest_telemetry = {}
+latest_telemetry = {1: {}, 2: {}}
 
-def start_mqtt_client():
-    host = os.getenv('BAMBU_HOST')
-    serial = os.getenv('BAMBU_SERIAL')
-    access_code = os.getenv('BAMBU_ACCESS_CODE')
-
+def connect_printer_mqtt(printer_id, host, serial, access_code):
     if not host or not access_code:
-        print("Printer credentials missing in .env. MQTT disabled.")
+        print(f"Printer {printer_id} credentials missing in .env. MQTT disabled.")
         return
 
     def on_connect(client, userdata, flags, rc):
-        print("Connected to Bambu Printer MQTT!")
+        print(f"Connected to Bambu Printer {printer_id} MQTT!")
         client.subscribe(f"device/{serial}/report")
 
     def on_message(client, userdata, msg):
@@ -39,7 +35,7 @@ def start_mqtt_client():
             payload = json.loads(msg.payload.decode('utf-8'))
             if 'print' in payload:
                 print_data = payload['print']
-                latest_telemetry = {
+                latest_telemetry[printer_id] = {
                     "gcode_state": print_data.get('gcode_state', 'IDLE'),
                     "mc_percent": print_data.get('mc_percent', 0),
                     "mc_remaining_time": print_data.get('mc_remaining_time', 0),
@@ -49,7 +45,10 @@ def start_mqtt_client():
         except Exception as e:
             pass # Ignore malformed packets silently to keep server running
 
-    client = mqtt.Client()
+    # Pass a unique client_id using os.getpid() so the broker doesn't reject or drop the connection
+    unique_client_id = f"327prints_backend_{printer_id}_{os.getpid()}"
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=unique_client_id)
+
     client.username_pw_set("bblp", access_code)
     client.tls_set(cert_reqs=ssl.CERT_NONE)
     client.tls_insecure_set(True)
@@ -60,10 +59,18 @@ def start_mqtt_client():
         client.connect(host, 8883, 60)
         client.loop_start() # Runs continuously in the background
     except Exception as e:
-        print(f"Failed to connect to printer: {e}")
+        print(f"Failed to connect to Printer {printer_id}: {e}")
 
-# Start the MQTT background thread once when Flask boots up
-start_mqtt_client()
+def start_mqtt_clients():
+    # Connect Printer 1 (Uses the first set of variables)
+    connect_printer_mqtt(1, os.getenv('BAMBU_HOST'), os.getenv('BAMBU_SERIAL'), os.getenv('BAMBU_ACCESS_CODE'))
+
+    # Connect Printer 2 (Uses the _2 variables)
+    connect_printer_mqtt(2, os.getenv('BAMBU_HOST_2'), os.getenv('BAMBU_SERIAL_2'), os.getenv('BAMBU_ACCESS_CODE_2'))
+
+# Only start MQTT in the main worker thread
+if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+    start_mqtt_clients()
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -151,59 +158,61 @@ def email_preview(job_id):
     return render_template('email_preview.html', job_id=job[0], first_name=job[1], last_name=job[2])
 
 # ==========================================
-# LIVE CAMERA FEED (FFMPEG SUBPROCESS)
+# LIVE CAMERA FEEDS (FFMPEG SUBPROCESS)
 # ==========================================
-import subprocess
 
-def generate_frames():
-    bambu_host = os.getenv('BAMBU_HOST')
-    access_code = os.getenv('BAMBU_ACCESS_CODE')
+def generate_frames(printer_id):
+    # Fetch credentials based on which printer the frontend is asking for
+    if printer_id == 1:
+        bambu_host = os.getenv('BAMBU_HOST')
+        access_code = os.getenv('BAMBU_ACCESS_CODE')
+    elif printer_id == 2:
+        bambu_host = os.getenv('BAMBU_HOST_2')
+        access_code = os.getenv('BAMBU_ACCESS_CODE_2')
+    else:
+        return
 
     if not bambu_host or not access_code:
-        print("Missing printer credentials for camera feed.")
+        print(f"Missing credentials for Printer {printer_id}.")
         return
 
     stream_url = f"rtsps://bblp:{access_code}@{bambu_host}:322/streaming/live/1"
 
-# Use system FFmpeg directly
+    # Use system FFmpeg directly
     command = [
         'ffmpeg',
         '-rtsp_transport', 'tcp',
         '-i', stream_url,
-        '-f', 'image2pipe',      # Output format: raw images
-        '-vcodec', 'mjpeg',      # Encoded as JPEG
-        '-'                      # Pipe to standard output
+        '-f', 'image2pipe',
+        '-vcodec', 'mjpeg',
+        '-'
     ]
 
-    # Let FFmpeg print errors directly to your terminal so we can diagnose them
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
 
     buffer = b''
     while True:
-        # Read chunks of the raw video stream
         chunk = process.stdout.read(8192)
         if not chunk:
             break
         buffer += chunk
 
-        # Look for the hex byte markers indicating the start and end of a JPEG image
         start_idx = buffer.find(b'\xff\xd8')
         end_idx = buffer.find(b'\xff\xd9')
 
         if start_idx != -1 and end_idx != -1:
-            # Extract the complete image frame
             jpg_frame = buffer[start_idx:end_idx+2]
-
-            # Remove the processed frame from the buffer
             buffer = buffer[end_idx+2:]
 
-            # Yield the frame to the Flask webpage
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + jpg_frame + b'\r\n')
 
-@app.route('/video_feed')
-def video_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+# The route now accepts an integer to determine which printer to stream
+@app.route('/video_feed/<int:printer_id>')
+def video_feed(printer_id):
+    from flask import Response
+    return Response(generate_frames(printer_id), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 # ==========================================
 # API ENDPOINTS (Backend Logic)
 # ==========================================
@@ -212,17 +221,20 @@ def video_feed():
 def get_printer_status():
     global latest_telemetry
 
-    # If the background thread hasn't caught a message yet, return a safe fallback
-    if not latest_telemetry:
-        return jsonify({"status": "success", "telemetry": {
-            "gcode_state": "CONNECTING...",
-            "mc_percent": 0,
-            "mc_remaining_time": 0,
-            "nozzle_temper": "--",
-            "bed_temper": "--"
-        }})
+    response_data = {}
+    for pid in [1, 2]:
+        if not latest_telemetry.get(pid):
+            response_data[str(pid)] = {
+                "gcode_state": "CONNECTING...",
+                "mc_percent": 0,
+                "mc_remaining_time": 0,
+                "nozzle_temper": "--",
+                "bed_temper": "--"
+            }
+        else:
+            response_data[str(pid)] = latest_telemetry[pid]
 
-    return jsonify({"status": "success", "telemetry": latest_telemetry})
+    return jsonify({"status": "success", "telemetry": response_data})
 
 @app.route('/api/users/create', methods=['POST'])
 def create_user():
