@@ -6,135 +6,313 @@
     <title>327Prints - Operator Dashboard</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 </head>
-<body class="bg-light">
+<body class="bg-secondary bg-opacity-10">
 
-<div class="container my-4">
-    <header class="d-flex justify-content-between align-items-center mb-4">
-        <h1>327Prints | Operator Management</h1>
+<div class="container-fluid py-4 px-4">
+    <header class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
         <div>
-            <a href="/" class="btn btn-outline-secondary me-2">Public Queue</a>
-            <a href="/intake" class="btn btn-outline-primary">Intake Form</a>
+            <h1 class="text-primary">Operator Control Center</h1>
+            <p class="text-muted mb-0">Luter 327 Lab</p>
         </div>
+        <a href="/" class="btn btn-outline-secondary">View Public Queue</a>
     </header>
 
-    <!-- Top Metric Cards -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card shadow-sm border-start border-primary border-4">
-                <div class="card-body">
-                    <h6 class="text-muted text-uppercase mb-1">Queue Total</h6>
-                    <h2 class="mb-0" id="stat-total-jobs">0</h2>
+    <div class="row">
+        <!-- Left Column: Interactive Queue Management -->
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Active Print Jobs</h5>
+                    <div>
+                        <button class="btn btn-sm btn-light" onclick="loadQueue()">Refresh Data</button>
+                        <button class="btn btn-sm btn-secondary ms-2" onclick="loadUsers()" data-bs-toggle="modal" data-bs-target="#userModal">Manage Users</button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="px-3">ID</th>
+                                    <th>Requester</th>
+                                    <th>Print Name</th>
+                                    <th>Status</th>
+                                    <th>Time Left</th>
+                                    <th class="text-end px-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="operator-queue-body">
+                                <!-- Populated dynamically via JS -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-start border-warning border-4">
-                <div class="card-body">
-                    <h6 class="text-muted text-uppercase mb-1">Pending Jobs</h6>
-                    <h2 class="mb-0" id="stat-pending-jobs">0</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm border-start border-success border-4">
-                <div class="card-body">
-                    <h6 class="text-muted text-uppercase mb-1">Printers Active</h6>
-                    <h2 class="mb-0">2 / 2</h2>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Main Queue Management Table -->
-    <div class="card shadow-sm">
-        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Queue Control Table</h5>
-            <button class="btn btn-sm btn-light" onclick="loadOperatorQueue()">Refresh</button>
-        </div>
-        <div class="card-body">
-            <table class="table table-hover align-middle">
-                <thead>
-                    <tr>
-                        <th>Job ID</th>
-                        <th>Requester</th>
-                        <th>Status</th>
-                        <th>Time Remaining</th>
-                        <th class="text-end">Quick Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="operator-queue-body">
-                    <!-- Dynamic Rows -->
-                </tbody>
-            </table>
+        <!-- Right Column: Tabbed Live Bambu Telemetry -->
+        <div class="col-lg-4">
+            <!-- Tab Navigation -->
+            <ul class="nav nav-tabs" id="printerTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active fw-bold" id="printer1-tab" data-bs-toggle="tab" data-bs-target="#printer1-pane" type="button" role="tab">Printer 1 (X1C)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold" id="printer2-tab" data-bs-toggle="tab" data-bs-target="#printer2-pane" type="button" role="tab">Printer 2 (P1P)</button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content mt-3" id="printerTabsContent">
+                
+                <!-- Printer 1 Tab Pane -->
+                <div class="tab-pane fade show active" id="printer1-pane" role="tabpanel">
+                    <div class="card shadow-sm border-top-0 rounded-0 rounded-bottom">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-3">
+                                <span class="text-muted fw-bold">Status:</span>
+                                <span id="printer1-status-text" class="badge bg-secondary">CONNECTING...</span>
+                            </div>
+
+                            <!-- Live Camera Feed 1 -->
+                            <div class="mb-4 text-center bg-black rounded overflow-hidden shadow-sm border">
+                                <img id="cam1" src="/video_feed/1" class="img-fluid w-100" alt="Live Printer 1 Feed">
+                            </div>
+
+                            <div class="row text-center mb-4">
+                                <div class="col-6 border-end">
+                                    <h6 class="text-muted mb-1">Nozzle Temp</h6>
+                                    <h4 id="printer1-nozzle-temp" class="text-danger mb-0">--°C</h4>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="text-muted mb-1">Bed Temp</h6>
+                                    <h4 id="printer1-bed-temp" class="text-warning mb-0">--°C</h4>
+                                </div>
+                            </div>
+
+                            <h6 class="text-muted mb-2">Print Progress <span id="printer1-time-left" class="float-end text-dark small">-- mins left</span></h6>
+                            <div class="progress" style="height: 25px;">
+                                <div id="printer1-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%;">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Printer 2 Tab Pane -->
+                <div class="tab-pane fade" id="printer2-pane" role="tabpanel">
+                    <div class="card shadow-sm border-top-0 rounded-0 rounded-bottom">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-3">
+                                <span class="text-muted fw-bold">Status:</span>
+                                <span id="printer2-status-text" class="badge bg-secondary">CONNECTING...</span>
+                            </div>
+
+                            <!-- Live Camera Feed 2 -->
+                            <div class="mb-4 text-center bg-black rounded overflow-hidden shadow-sm border">
+                                <img id="cam2" src="" class="img-fluid w-100" alt="Live Printer 2 Feed">
+                            </div>
+
+                            <div class="row text-center mb-4">
+                                <div class="col-6 border-end">
+                                    <h6 class="text-muted mb-1">Nozzle Temp</h6>
+                                    <h4 id="printer2-nozzle-temp" class="text-danger mb-0">--°C</h4>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="text-muted mb-1">Bed Temp</h6>
+                                    <h4 id="printer2-bed-temp" class="text-warning mb-0">--°C</h4>
+                                </div>
+                            </div>
+
+                            <h6 class="text-muted mb-2">Print Progress <span id="printer2-time-left" class="float-end text-dark small">-- mins left</span></h6>
+                            <div class="progress" style="height: 25px;">
+                                <div id="printer2-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%;">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 </div>
 
+<!-- User Management Modal -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Manage Users</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>First Name</th>
+                    <th>Last Name</th>
+                    <th>Email</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="user-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-    async function loadOperatorQueue() {
+    // -----------------------------------------
+    // STREAM MANAGEMENT (Lazy Loading)
+    // -----------------------------------------
+    const cam1 = document.getElementById('cam1');
+    const cam2 = document.getElementById('cam2');
+
+    document.getElementById('printer1-tab').addEventListener('show.bs.tab', function () {
+        cam1.src = '/video_feed/1'; 
+        cam2.src = '';              
+    });
+
+    document.getElementById('printer2-tab').addEventListener('show.bs.tab', function () {
+        cam2.src = '/video_feed/2'; 
+        cam1.src = '';              
+    });
+
+    // -----------------------------------------
+    // QUEUE MANAGEMENT & EMAIL DISPATCH
+    // -----------------------------------------
+    async function loadQueue() {
         try {
             const response = await fetch('/api/jobs/queue');
             const jobs = await response.json();
             const tbody = document.getElementById('operator-queue-body');
             tbody.innerHTML = '';
 
-            let totalJobs = jobs.length;
-            let pendingJobs = 0;
-
             jobs.forEach(job => {
-                if (job.Current_status === 'Pending') pendingJobs++;
-
-                let statusBadge = 'bg-secondary';
-                if (job.Current_status === 'Printing') statusBadge = 'bg-success';
-                else if (job.Current_status === 'Pending') statusBadge = 'bg-warning text-dark';
-                else if (job.Current_status === 'Completed') statusBadge = 'bg-info text-dark';
-                else if (job.Current_status === 'Failed') statusBadge = 'bg-danger';
+                // Badge color logic
+                let badgeClass = 'bg-secondary';
+                if (job.Current_status === 'Pending') badgeClass = 'bg-warning text-dark';
+                if (job.Current_status === 'Printing') badgeClass = 'bg-primary';
+                if (job.Current_status === 'Completed') badgeClass = 'bg-success';
 
                 const row = `
                     <tr>
-                        <td><strong>#${job.Job_ID}</strong></td>
+                        <td class="px-3 fw-bold">#${job.Job_ID}</td>
                         <td>${job.First_name} ${job.Last_name}</td>
-                        <td><span class="badge ${statusBadge}">${job.Current_status}</span></td>
+                        <td><strong>${job.Print_Name}</strong></td>
+                        <td><span class="badge ${badgeClass}">${job.Current_status}</span></td>
                         <td>${job.Time_remaining} mins</td>
-                        <td class="text-end">
-                            <button class="btn btn-sm btn-outline-success me-1" onclick="updateStatus(${job.Job_ID}, 'Printing')">Start</button>
-                            <button class="btn btn-sm btn-outline-info me-1" onclick="updateStatus(${job.Job_ID}, 'Completed')">Complete</button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="updateStatus(${job.Job_ID}, 'Failed')">Fail</button>
-                            <a href="/email-preview/${job.Job_ID}" target="_blank" class="btn btn-sm btn-secondary ms-2">Email</a>
+                        <td class="text-end px-3">
+                            <button class="btn btn-sm btn-outline-primary" onclick="updateStatus(${job.Job_ID}, 'Printing')">Start Print</button>
+                            <button class="btn btn-sm btn-success ms-1" onclick="updateStatus(${job.Job_ID}, 'Completed')">Mark Done</button>
                         </td>
                     </tr>
                 `;
                 tbody.innerHTML += row;
             });
-
-            document.getElementById('stat-total-jobs').innerText = totalJobs;
-            document.getElementById('stat-pending-jobs').innerText = pendingJobs;
-
         } catch (error) {
             console.error('Error fetching queue:', error);
         }
     }
 
     async function updateStatus(jobId, newStatus) {
+        if (!confirm(`Are you sure you want to change Job #${jobId} to ${newStatus}?`)) return;
+
         try {
             const response = await fetch('/api/jobs/update-status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ job_id: jobId, status: newStatus })
             });
-
-            const result = await response.json();
-            if (result.status === 'success') {
-                loadOperatorQueue();
-            } else {
-                alert('Update failed: ' + result.message);
+            
+            const data = await response.json();
+            if (data.status === 'success') {
+                if (newStatus === 'Completed') {
+                    alert(`Job #${jobId} completed! The system is dispatching an email to the user.`);
+                }
+                loadQueue(); // Refresh table
             }
         } catch (error) {
             console.error('Error updating status:', error);
+            alert('Failed to update job status.');
         }
     }
 
-    loadOperatorQueue();
+    // -----------------------------------------
+    // USER MANAGEMENT
+    // -----------------------------------------
+    async function loadUsers() {
+        const response = await fetch('/api/users/list');
+        const users = await response.json();
+        const tbody = document.getElementById('user-table-body');
+        tbody.innerHTML = '';
+
+        users.forEach(u => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${u.User_ID}</td>
+                    <td><input type="text" id="fname-${u.User_ID}" class="form-control form-control-sm" value="${u.First_name}"></td>
+                    <td><input type="text" id="lname-${u.User_ID}" class="form-control form-control-sm" value="${u.Last_name}"></td>
+                    <td>${u.Email_address}</td>
+                    <td><button class="btn btn-sm btn-primary" onclick="saveUser(${u.User_ID})">Save</button></td>
+                </tr>
+            `;
+        });
+    }
+
+    async function saveUser(userId) {
+        const fname = document.getElementById(`fname-${userId}`).value;
+        const lname = document.getElementById(`lname-${userId}`).value;
+        
+        await fetch('/api/users/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, first_name: fname, last_name: lname })
+        });
+        alert('User updated successfully!');
+        loadQueue(); // Refresh queue to reflect name changes
+    }
+
+    // -----------------------------------------
+    // TELEMETRY POLLING
+    // -----------------------------------------
+    async function loadPrinterTelemetry() {
+        try {
+            const response = await fetch('/api/printer/status');
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                [1, 2].forEach(pid => {
+                    const t = data.telemetry[pid];
+                    if (t) {
+                        const statusBadge = document.getElementById(`printer${pid}-status-text`);
+                        statusBadge.innerText = t.gcode_state;
+                        statusBadge.className = t.gcode_state === 'RUNNING' ? 'badge bg-success' : 'badge bg-primary';
+
+                        document.getElementById(`printer${pid}-nozzle-temp`).innerText = t.nozzle_temper + '°C';
+                        document.getElementById(`printer${pid}-bed-temp`).innerText = t.bed_temper + '°C';
+
+                        const progressBar = document.getElementById(`printer${pid}-progress-bar`);
+                        progressBar.style.width = t.mc_percent + '%';
+                        progressBar.innerText = t.mc_percent + '%';
+
+                        document.getElementById(`printer${pid}-time-left`).innerText = t.mc_remaining_time + ' mins left';
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching telemetry:', error);
+        }
+    }
+
+    // Initial Load
+    loadQueue();
+    loadPrinterTelemetry();
+    setInterval(loadPrinterTelemetry, 10000);
 </script>
 </body>
 </html>

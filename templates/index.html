@@ -27,6 +27,7 @@
                             <tr>
                                 <th>Pos</th>
                                 <th>Requester</th>
+                                <th>Print Name</th>
                                 <th>Status</th>
                                 <th>Time Remaining</th>
                             </tr>
@@ -159,6 +160,7 @@
                     <tr>
                         <td>${job.Queue_position}</td>
                         <td>${job.First_name} ${job.Last_name}</td>
+                        <td><strong>${job.Print_Name}</strong></td>
                         <td><span class="badge ${job.Current_status === 'Printing' ? 'bg-success' : 'bg-warning text-dark'}">${job.Current_status}</span></td>
                         <td>${job.Time_remaining} mins</td>
                     </tr>

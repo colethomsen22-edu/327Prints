@@ -14,9 +14,25 @@
         </div>
         <div class="card-body">
             <form id="intake-form">
+                <div class="row mb-3">
+                    <div class="col">
+                        <label class="form-label">First Name</label>
+                        <input type="text" id="firstName" class="form-control" required>
+                    </div>
+                    <div class="col">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" id="lastName" class="form-control" required>
+                    </div>
+                </div>
+
                 <div class="mb-3">
-                    <label class="form-label">Requester User ID</label>
-                    <input type="number" id="requester_id" class="form-control" placeholder="e.g., 1" required>
+                    <label class="form-label">Email Address</label>
+                    <input type="email" id="email" class="form-control" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Print Name</label>
+                    <input type="text" id="printName" class="form-control" placeholder="e.g., Robot Arm Base" required>
                 </div>
 
                 <div class="mb-3">
@@ -40,12 +56,18 @@
 <script>
     document.getElementById('intake-form').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const requesterId = document.getElementById('requester_id').value;
+        
+        const payload = {
+            first_name: document.getElementById('firstName').value,
+            last_name: document.getElementById('lastName').value,
+            email: document.getElementById('email').value,
+            print_name: document.getElementById('printName').value
+        };
 
         const response = await fetch('/api/jobs/submit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requester_id: parseInt(requesterId) })
+            body: JSON.stringify(payload)
         });
 
         const result = await response.json();
